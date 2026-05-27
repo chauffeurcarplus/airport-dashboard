@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>接送服務分析儀表板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{
+  --teal:#1D9E75;--teal-dark:#0F6E56;--teal-light:#E1F5EE;
+  --blue-light:#EAF1FB;--amber-light:#FEF3E7;--red-light:#FEF0F0;
+  --gray:#f4f5f7;--border:#e2e4e8;--text:#1a1a1a;--muted:#666;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft JhengHei',sans-serif;font-size:13px;color:var(--text);background:var(--gray);min-height:100vh}
+
+/* ── Topbar ── */
+.topbar{position:sticky;top:0;z-index:100;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;height:48px;padding:0 20px;gap:0;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.logo{font-size:15px;font-weight:700;color:var(--teal);margin-right:24px;white-space:nowrap;letter-spacing:-.3px}
+.tabs{display:flex;height:100%}
+.tab{padding:0 16px;height:100%;display:flex;align-items:center;font-size:12.5px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--teal);border-bottom-color:var(--teal);font-weight:600}
+
+/* ── Upload Area ── */
+.upload-zone{background:#fff;border:2px dashed var(--border);border-radius:12px;padding:48px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--teal);background:var(--teal-light)}
+.upload-zone h3{font-size:16px;color:var(--text);margin-bottom:8px}
+.upload-zone p{font-size:12px;color:var(--muted)}
+.upload-icon{font-size:40px;margin-bottom:12px}
+.file-status{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.file-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.file-badge.loaded{background:var(--teal-light);color:var(--teal-dark)}
+.file-badge.missing{background:#fff3cd;color:#856404}
+
+/* ── Page ── */
+.page{display:none;padding:16px 20px;max-width:1400px;margin:0 auto}
+.page.active{display:block}
+
+/* ── Filter Bar ── */
+.fb{background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.fl{font-size:11px;color:var(--muted);white-space:nowrap}
+select{font-size:11px;padding:3px 7px;border-radius:6px;border:1px solid var(--border);background:#f8f9fb;color:var(--text);height:27px;outline:none;cursor:pointer}
+select:focus{border-color:var(--teal)}
+.tg{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.tgb{padding:4px 11px;font-size:11px;cursor:pointer;background:#f8f9fb;color:var(--muted);border:none;white-space:nowrap;transition:all .1s}
+.tgb:hover{background:#eee}
+.tgb.active{background:var(--teal);color:#fff}
+.dv{width:1px;height:16px;background:var(--border);flex-shrink:0}
+.rg{display:flex;align-items:center;gap:3px;background:#f8f9fb;border:1px solid var(--border);border-radius:6px;padding:0 6px;height:27px}
+.rg select{border:none;background:transparent;padding:0 2px;height:auto}
+.rg-sep{font-size:11px;color:var(--muted)}
+
+/* ── Buttons ── */
+.btn{padding:5px 12px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:#f8f9fb;color:#555;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .1s;white-space:nowrap}
+.btn:hover{background:#eee}
+.btn-primary{background:var(--teal);color:#fff;border-color:var(--teal)}
+.btn-primary:hover{background:var(--teal-dark)}
+.btn-export{background:#EAF3DE;color:#3B6D11;border-color:#C0DD97}
+.btn-export:hover{background:#d4eabe}
+.btn-ai{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;padding:8px 20px;font-size:12px;border-radius:8px}
+.btn-ai:hover{opacity:.9}
+
+/* ── Metric Cards ── */
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:14px}
+.metric-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;transition:box-shadow .15s}
+.metric-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.metric-label{font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4}
+.metric-val{font-size:24px;font-weight:700;color:var(--text);letter-spacing:-.5px}
+.metric-sub{font-size:11px;margin-top:4px}
+.up{color:#1D9E75}.down{color:#E24B4A}.flat{color:#aaa}
+
+/* ── Card ── */
+.card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.card-hd{font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+
+/* ── Table ── */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th{text-align:center;padding:5px 7px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);border-right:1px solid #f0f1f3;background:#f8f9fb;white-space:nowrap}
+th.thl{text-align:left}
+th.g0{background:#f8f9fb}
+th.g1{background:#E8F8F2;color:#0F6E56}
+th.g2{background:#EAF1FB;color:#185FA5}
+th.g3{background:#FEF3E7;color:#854F0B}
+th.g4{background:#FEF0F0;color:#A32D2D}
+td{padding:5px 7px;border-bottom:1px solid #f0f1f3;border-right:1px solid #f5f6f8;text-align:right;white-space:nowrap;color:var(--text)}
+td.tl{text-align:left}
+td.sec{background:#f4f5f7;font-weight:700;font-size:12px}
+td.sub{background:rgba(29,158,117,.05);font-weight:600}
+td.c1{background:rgba(29,158,117,.02)}
+td.c2{background:rgba(55,138,221,.02)}
+td.c3{background:rgba(186,117,23,.02)}
+td.c4{background:rgba(162,45,45,.02)}
+tr:hover td{background:#fafbfc}
+
+/* ── Badges ── */
+.bk{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10.5px;font-weight:600}
+.bk-g{background:#EAF3DE;color:#3B6D11}
+.bk-y{background:#FAEEDA;color:#854F0B}
+.bk-r{background:#FCEBEB;color:#A32D2D}
+
+/* ── Goal inputs ── */
+.gi{width:95px;font-size:11px;padding:3px 6px;text-align:right;border-radius:5px;border:1px solid var(--border);background:#f8f9fb;color:var(--text)}
+.gi:focus{outline:none;border-color:var(--teal);background:#fff}
+
+/* ── Progress ── */
+.pb{height:8px;border-radius:4px;background:#eee;overflow:hidden;margin-top:3px}
+.pf{height:100%;border-radius:4px;transition:width .5s}
+
+/* ── AI Panel ── */
+.ai-panel{background:linear-gradient(135deg,#f8f9ff,#f0f4ff);border:1px solid #d0d8ff;border-radius:12px;padding:20px;margin-bottom:14px}
+.ai-panel h3{font-size:14px;font-weight:700;color:#3b4cca;margin-bottom:8px}
+.ai-panel p{font-size:12px;color:#555;margin-bottom:14px;line-height:1.6}
+.ai-copy-area{background:#fff;border:1px solid #d0d8ff;border-radius:8px;padding:12px;font-size:11px;color:#333;line-height:1.7;max-height:240px;overflow-y:auto;white-space:pre-wrap;font-family:monospace}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:500;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999;white-space:nowrap}
+#toast.show{opacity:1}
+
+/* ── Loading / Empty ── */
+.empty{text-align:center;padding:48px;color:var(--muted);font-size:13px}
+.empty-icon{font-size:36px;margin-bottom:12px}
+
+/* ── RWD ── */
+@media(max-width:768px){
+  .topbar{padding:0 12px}
+  .tab{padding:0 10px;font-size:11.5px}
+  .page{padding:10px 12px}
+  .metric-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">🚖 接送服務儀表板</span>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-page="p1">每月總覽</div>
+    <div class="tab" data-page="p2">目標設定</div>
+    <div class="tab" data-page="p3">交叉分析</div>
+    <div class="tab" data-page="p4">趨勢圖</div>
+    <div class="tab" data-page="p5">AI 分析</div>
+  </div>
+</div>
+
+<!-- ══ PAGE 1 ══════════════════════════════════════ -->
+<div class="page active" id="p1">
+  <!-- 上傳區 -->
+  <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <div class="upload-icon">📂</div>
+    <h3>拖曳或點擊上傳 Excel 檔案</h3>
+    <p>請同時上傳：服務案件清單_YYYYMM.xlsx 和 司機請款報表_YYYYMM.xlsx</p>
+    <div class="file-status" id="file-status"></div>
+  </div>
+  <input type="file" id="file-input" accept=".xlsx,.xls" multiple style="display:none">
+
+  <div class="fb">
+    <span class="fl">服務類型</span>
+    <div class="tg">
+      <button class="tgb active" data-svc="all">全部</button>
+      <button class="tgb" data-svc="airport">機場接送</button>
+      <button class="tgb" data-svc="general">一般接送</button>
+    </div>
+    <div class="dv"></div>
+    <span class="fl">上期</span>
+    <div class="rg"><select id="prev-s"></select><span class="rg-sep">～</span><select id="prev-e"></select></div>
+    <span class="fl">當期</span>
+    <div class="rg"><select id="curr-s"></select><span class="rg-sep">～</span><select id="curr-e"></select></div>
+    <span class="fl">累計</span>
+    <div class="rg"><select id="acc-s"></select><span class="rg-sep">～</span><select id="acc-e"></select></div>
+    <div class="dv"></div>
+    <span class="fl">目標版本</span>
+    <div class="tg">
+      <button class="tgb active" data-ver="original">原始版</button>
+      <button class="tgb" data-ver="internal">內控版</button>
+    </div>
+    <div class="dv"></div>
+    <button class="btn btn-export" onclick="exportP1()">📥 匯出 Excel</button>
+  </div>
+
+  <div class="metric-grid" id="p1-metrics">
+    <div class="empty" style="grid-column:1/-1"><div class="empty-icon">📊</div>請先上傳資料檔案</div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">
+      <span id="p1-title">每月總覽</span>
+      <button class="btn btn-export" onclick="exportP1()">📥 匯出 Excel</button>
+    </div>
+    <div class="tbl-wrap" id="p1-wrap"><div class="empty">上傳資料後自動顯示</div></div>
+  </div>
+</div>
+
+<!-- ══ PAGE 2 ══════════════════════════════════════ -->
+<div class="page" id="p2">
+  <div class="fb">
+    <span class="fl">目標版本</span>
+    <div class="tg">
+      <button class="tgb active" data-gver="original">原始版</button>
+      <button class="tgb" data-gver="internal">內控版</button>
+    </div>
+    <div class="dv"></div>
+    <span id="p2-hint" style="font-size:11px;color:#aaa"></span>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button class="btn" onclick="resetGoals()">↩ 重設</button>
+      <button class="btn btn-primary" onclick="saveGoals()">💾 儲存目標</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-hd">
+      <span>目標設定</span>
+      <span style="font-size:11px;color:var(--muted);font-weight:400">年度目標自動加總，唯讀</span>
+    </div>
+    <div class="tbl-wrap" id="p2-wrap"></div>
+  </div>
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
+    <button class="btn" onclick="resetGoals()">↩ 重設</button>
+    <button class="btn btn-primary" style="padding:8px 20px;font-size:12px" onclick="saveGoals()">💾 儲存目標</button>
+  </div>
+</div>
+
+<!-- ══ PAGE 3 ══════════════════════════════════════ -->
+<div class="page" id="p3">
+  <div class="fb">
+    <span class="fl">月份</span>
+    <div class="rg"><select id="p3-s"></select><span class="rg-sep">～</span><select id="p3-e"></select></div>
+    <div class="dv"></div>
+    <span class="fl">列維度</span>
+    <select id="p3-row">
+      <option value="serviceType">服務類型</option>
+      <option value="clientHigh">客戶類型（高階）</option>
+      <option value="clientDetail">客戶類型（細分）</option>
+      <option value="driverType">司機類型</option>
+      <option value="vendor">車商</option>
+      <option value="city">縣市</option>
+      <option value="carType">車型</option>
+    </select>
+    <span class="fl">欄維度</span>
+    <select id="p3-col">
+      <option value="clientHigh">客戶類型（高階）</option>
+      <option value="serviceType">服務類型</option>
+      <option value="driverType">司機類型</option>
+      <option value="carType">車型</option>
+    </select>
+    <span class="fl">第三維度</span>
+    <select id="p3-third">
+      <option value="">（不選）</option>
+      <option value="driverType">司機類型</option>
+      <option value="carType">車型</option>
+      <option value="city">縣市</option>
+    </select>
+    <div class="dv"></div>
+    <span class="fl">指標</span>
+    <div class="tg">
+      <button class="tgb active" data-metric="trips">趟次</button>
+      <button class="tgb" data-metric="revenue">營收</button>
+      <button class="tgb" data-metric="cost">成本</button>
+      <button class="tgb" data-metric="profit">毛利</button>
+      <button class="tgb" data-metric="marginRate">毛利率</button>
+    </div>
+    <div style="margin-left:auto">
+      <button class="btn btn-export" onclick="exportP3()">📥 匯出 Excel</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-hd">
+      <span id="p3-title">交叉分析</span>
+      <button class="btn btn-export" onclick="exportP3()">📥 匯出 Excel</button>
+    </div>
+    <div class="tbl-wrap" id="p3-wrap"><div class="empty">上傳資料後自動顯示</div></div>
+  </div>
+</div>
+
+<!-- ══ PAGE 4 ══════════════════════════════════════ -->
+<div class="page" id="p4">
+  <div class="fb">
+    <span class="fl">期間</span>
+    <div class="rg"><select id="p4-s"></select><span class="rg-sep">～</span><select id="p4-e"></select></div>
+    <div class="dv"></div>
+    <span class="fl">服務類型</span>
+    <select id="p4-svc">
+      <option value="all">全部</option>
+      <option value="機場接送">機場接送</option>
+      <option value="一般接送">一般接送</option>
+      <option value="代駕服務">代駕服務</option>
+    </select>
+    <span class="fl">維度</span>
+    <select id="p4-dim">
+      <option value="none">（不分拆）</option>
+      <option value="clientHigh">客戶類型（高階）</option>
+      <option value="driverType">司機類型</option>
+      <option value="carType">車型</option>
+    </select>
+    <div class="dv"></div>
+    <span class="fl">指標</span>
+    <div class="tg">
+      <button class="tgb active" data-trend="trips">趟次</button>
+      <button class="tgb" data-trend="revenue">營收</button>
+      <button class="tgb" data-trend="cost">成本</button>
+      <button class="tgb" data-trend="profit">毛利</button>
+      <button class="tgb" data-trend="marginRate">毛利率</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-hd">月趨勢折線圖</div>
+    <div id="p4-legend" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;font-size:11px;color:var(--muted)"></div>
+    <div style="position:relative;width:100%;height:240px"><canvas id="trend-chart" role="img" aria-label="月趨勢折線圖"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-hd">同比長條圖</div>
+    <div style="display:flex;gap:12px;margin-bottom:8px;font-size:11px;color:var(--muted)">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#1D9E75;margin-right:4px"></span>今年</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#9FE1CB;margin-right:4px"></span>去年同期</span>
+    </div>
+    <div style="position:relative;width:100%;height:200px"><canvas id="yoy-chart" role="img" aria-label="同比長條圖"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-hd">累計達成率</div>
+    <div id="p4-progress"><div class="empty">上傳資料後自動顯示</div></div>
+  </div>
+</div>
+
+<!-- ══ PAGE 5 ══════════════════════════════════════ -->
+<div class="page" id="p5">
+  <div class="ai-panel">
+    <h3>🤖 AI 分析助理</h3>
+    <p>點擊下方按鈕，系統會根據你上傳的真實資料自動產生分析摘要。<br>複製後貼到 <strong>Claude.ai</strong> 對話視窗，即可獲得深度 AI 分析，完全免費！</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <button class="btn-ai btn" onclick="genSummary('overview')">📊 本月整體摘要</button>
+      <button class="btn-ai btn" onclick="genSummary('client')">👥 客戶類型分析</button>
+      <button class="btn-ai btn" onclick="genSummary('cost')">💰 成本異常分析</button>
+      <button class="btn-ai btn" onclick="genSummary('trend')">📈 月趨勢變化</button>
+      <button class="btn-ai btn" onclick="genSummary('goal')">🎯 目標達成預測</button>
+    </div>
+    <div id="ai-output" class="ai-copy-area" style="display:none"></div>
+    <div style="display:flex;gap:8px;margin-top:10px" id="ai-actions" style="display:none">
+      <button class="btn btn-primary" onclick="copyAI()">📋 複製摘要</button>
+      <a href="https://claude.ai" target="_blank" class="btn btn-export">前往 Claude.ai 貼上分析 →</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">自訂問題產生摘要</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">輸入你想分析的問題，系統會整理相關數據，讓你複製到 Claude.ai 詢問</p>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="custom-q" placeholder="例如：哪個縣市的趟次最多？聯邦銀行的毛利率如何？" style="flex:1;padding:8px 12px;border-radius:6px;border:1px solid var(--border);font-size:12px">
+      <button class="btn btn-primary" onclick="genCustom()">產生摘要</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// 全域狀態
+// ══════════════════════════════════════════════════════════
+const S = {
+  rows: [],          // 合併後的所有資料列
+  months: [],        // 可用月份清單
+  clientMap: {},     // 客戶類型對照表
+  goals: { original: getDefaultGoals(), internal: getDefaultGoals() },
+  goalVer: 'original',
+  svc: 'all',
+  charts: { trend: null, yoy: null },
+  files: {},         // 已載入的檔案
+};
+
+function getDefaultGoals() {
+  return {
+    airport_trips: [7200,6800,7500,7650,7800,7200,7400,7600,7800,8000,8200,8500],
+    general_trips: [1200,1100,1250,1250,1300,1200,1200,1250,1300,1350,1400,1500],
+    airport_revenue: [10000000,9500000,10500000,10800000,11000000,10200000,10500000,10800000,11000000,11200000,11500000,12000000],
+    general_revenue: [1400000,1300000,1450000,1450000,1500000,1400000,1400000,1450000,1500000,1600000,1650000,1750000],
+    driver_count: [155,158,160,170,170,170,175,175,180,180,185,190],
+  };
+}
+
+// ══════════════════════════════════════════════════════════
+// 工具函數
+// ══════════════════════════════════════════════════════════
+const fmt = (n, type) => {
+  if (n === null || n === undefined) return '—';
+  const v = parseFloat(n);
+  if (isNaN(v)) return '—';
+  if (type === 'pct') return (v * 100).toFixed(1) + '%';
+  if (type === 'money') return '$' + Math.round(v).toLocaleString();
+  return Math.round(v).toLocaleString();
+};
+
+const fmtChg = (curr, prev) => {
+  if (!prev) return '<span class="flat">—</span>';
+  const c = (curr - prev) / Math.abs(prev);
+  const p = (Math.abs(c) * 100).toFixed(1) + '%';
+  if (c > 0.001) return `<span class="up">▲+${p}</span>`;
+  if (c < -0.001) return `<span class="down">▼-${p}</span>`;
+  return '<span class="flat">—</span>';
+};
+
+const badge = (a, t) => {
+  if (!t) return '<span class="flat">—</span>';
+  const r = a / t;
+  const p = (r * 100).toFixed(1) + '%';
+  if (r >= 1) return `<span class="bk bk-g">${p}</span>`;
+  if (r >= 0.8) return `<span class="bk bk-y">${p}</span>`;
+  return `<span class="bk bk-r">${p}</span>`;
+};
+
+const toast = (msg, ms = 2500) => {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), ms);
+};
+
+const mmLabel = mm => mm.substring(0,4) + '/' + mm.substring(4,6);
+
+const filterMM = (start, end) => S.rows.filter(r => r.yyyymm >= start && r.yyyymm <= end);
+
+function aggregate(rows, fields) {
+  const res = {};
+  rows.forEach(r => {
+    const key = fields.map(f => r[f] || '').join('|');
+    if (!res[key]) res[key] = { trips:0, revenue:0, cost:0, profit:0 };
+    res[key].trips++;
+    res[key].revenue += r.revenue;
+    res[key].cost += r.cost;
+    res[key].profit += r.profit;
+  });
+  Object.values(res).forEach(v => {
+    v.marginRate = v.revenue > 0 ? v.profit / v.revenue : 0;
+    v.avgRevenue = v.trips > 0 ? v.revenue / v.trips : 0;
+  });
+  return res;
+}
+
+function prevYearMM(mm) {
+  return String(parseInt(mm.substring(0,4))-1) + mm.substring(4);
+}
+
+function monthsBetween(s, e) {
+  const ms = []; let y=parseInt(s.substring(0,4)), m=parseInt(s.substring(4,6));
+  const ey=parseInt(e.substring(0,4)), em=parseInt(e.substring(4,6));
+  while(y<ey||(y===ey&&m<=em)){ms.push(String(y)+String(m).padStart(2,'0'));m++;if(m>12){m=1;y++;}}
+  return ms;
+}
+
+// ══════════════════════════════════════════════════════════
+// 資料分類邏輯
+// ══════════════════════════════════════════════════════════
+function classifySvc(airport, contract) {
+  const ap = String(airport||'');
+  const ct = String(contract||'');
+  if (ap.includes('代駕')) return '代駕服務';
+  if ((ap.includes('機場')||ap.includes('寰宇')||ap.includes('環亞'))&&!ct.includes('日本航空')) return '機場接送';
+  return '一般接送';
+}
+
+function classifyDriver(vendor) {
+  const v = String(vendor||'').trim();
+  if (v.includes('測試')) return null;
+  if (v === '格上') return '自聘司機';
+  if (v === '承攬') return '承攬司機';
+  return '委外司機';
+}
+
+function getClientInfo(contract, membership) {
+  const k1 = contract+'|'+membership;
+  const k2 = contract+'|';
+  return S.clientMap[k1] || S.clientMap[k2] || { detail:'其他', high:'其他' };
+}
+
+// ══════════════════════════════════════════════════════════
+// 檔案解析
+// ══════════════════════════════════════════════════════════
+function parseExcel(arrayBuffer, filename) {
+  const wb = XLSX.read(arrayBuffer, { type:'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { defval:'' });
+}
+
+function parseClientType(data) {
+  S.clientMap = {};
+  data.forEach(r => {
+    const contract = String(r['合約']||'').trim();
+    const membership = String(r['入會']||'').trim();
+    const detail = String(r['客戶類型']||'').trim();
+    const high = String(r['客戶類型(高階溝通會用)']||r['__EMPTY_3']||'').trim();
+    if (!contract) return;
+    const k1 = contract+'|'+membership;
+    const k2 = contract+'|';
+    const info = { detail, high };
+    S.clientMap[k1] = info;
+    if (!S.clientMap[k2]) S.clientMap[k2] = info;
+  });
+}
+
+function parseTrips(data, yyyymm) {
+  const INVALID = ['已結案(取消)', '案件不成立'];
+  const rows = [];
+  data.forEach(r => {
+    const status = String(r['狀態']||'').trim();
+    if (INVALID.includes(status)) return;
+    const vendor = String(r['車商']||'').trim();
+    const driverType = classifyDriver(vendor);
+    if (!driverType) return;
+
+    const contract = String(r['合約']||'').trim();
+    const membership = String(r['入會']||'').trim();
+    const airport = String(r['機場']||'').trim();
+    const serviceType = classifySvc(airport, contract);
+    const clientInfo = getClientInfo(contract, membership);
+
+    const selfPay = parseFloat(String(r['會員自費 總額']||'0').replace(/,/g,''))||0;
+    const contractAmt = parseFloat(String(r['合約轉帳 總額']||'0').replace(/,/g,''))||0;
+
+    // 取接送時間月份
+    const svcTime = r['接送時間'] || '';
+    let mm = yyyymm;
+    if (svcTime) {
+      const d = new Date(svcTime);
+      if (!isNaN(d)) mm = String(d.getFullYear()) + String(d.getMonth()+1).padStart(2,'0');
+    }
+
+    rows.push({
+      orderNo: String(r['預約單號']||'').trim(),
+      yyyymm: mm,
+      serviceType,
+      clientDetail: clientInfo.detail,
+      clientHigh: clientInfo.high,
+      driverType,
+      vendor,
+      city: String(r['縣市']||'').trim(),
+      carType: String(r['車型']||'').trim(),
+      revenue: selfPay + contractAmt,
+      cost: 0,
+    });
+  });
+  return rows;
+}
+
+function parseCost(data) {
+  const INVALID = ['已結案(取消)'];
+  const map = {};
+  data.forEach(r => {
+    const status = String(r['狀態']||'').trim();
+    if (INVALID.includes(status)) return;
+    const vendor = String(r['車商']||'').trim();
+    if (vendor.includes('測試')) return;
+    const orderNo = String(r['預約單號']||'').trim();
+    const cost = parseFloat(String(r['車商簽收 總額']||'0').replace(/,/g,''))||0;
+    if (orderNo) map[orderNo] = cost;
+  });
+  return map;
+}
+
+// ══════════════════════════════════════════════════════════
+// 檔案上傳處理
+// ══════════════════════════════════════════════════════════
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+async function handleFiles(files) {
+  for (const file of files) {
+    const name = file.name;
+    const buf = await file.arrayBuffer();
+    const data = parseExcel(buf, name);
+
+    if (name.includes('客戶類型')) {
+      parseClientType(data);
+      S.files['clientType'] = name;
+    } else if (name.match(/服務案件清單_(\d{6})/)) {
+      const mm = name.match(/服務案件清單_(\d{6})/)[1];
+      S.files['trips_' + mm] = { name, data, mm };
+    } else if (name.match(/司機請款報表_(\d{6})/)) {
+      const mm = name.match(/司機請款報表_(\d{6})/)[1];
+      S.files['cost_' + mm] = { name, costMap: parseCost(data), mm };
+    }
+  }
+  rebuildData();
+  updateFileStatus();
+  toast('✅ 檔案載入完成！');
+}
+
+function rebuildData() {
+  S.rows = [];
+  // 找所有已載入的趟次月份
+  const tripKeys = Object.keys(S.files).filter(k => k.startsWith('trips_'));
+  tripKeys.forEach(tk => {
+    const { data, mm } = S.files[tk];
+    const tripRows = parseTrips(data, mm);
+    const costMap = S.files['cost_' + mm]?.costMap || {};
+    tripRows.forEach(r => {
+      r.cost = costMap[r.orderNo] || 0;
+      r.profit = r.revenue - r.cost;
+    });
+    S.rows.push(...tripRows);
+  });
+
+  // 更新月份清單
+  S.months = [...new Set(S.rows.map(r => r.yyyymm))].sort();
+  updateSelects();
+  refreshAll();
+}
+
+function updateFileStatus() {
+  const div = document.getElementById('file-status');
+  const items = Object.values(S.files).map(f => {
+    const name = typeof f === 'string' ? f : f.name;
+    return `<span class="file-badge loaded">✓ ${name}</span>`;
+  });
+  div.innerHTML = items.join('') || '';
+}
+
+function updateSelects() {
+  const ms = S.months;
+  if (!ms.length) return;
+  const opts = ms.map(m => `<option value="${m}">${mmLabel(m)}</option>`).join('');
+  ['prev-s','prev-e','curr-s','curr-e','acc-s','acc-e','p3-s','p3-e','p4-s','p4-e'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.innerHTML = opts;
+  });
+  const last = ms[ms.length-1];
+  const prev = ms[ms.length-2]||last;
+  const first = ms[0];
+  const sv = (id,v) => { const el=document.getElementById(id); if(el) el.value=v; };
+  sv('prev-s',prev); sv('prev-e',prev);
+  sv('curr-s',last); sv('curr-e',last);
+  sv('acc-s',first); sv('acc-e',last);
+  sv('p3-s',last); sv('p3-e',last);
+  sv('p4-s',first); sv('p4-e',last);
+}
+
+function refreshAll() {
+  renderP1(); renderP3(); renderP4(); renderP2();
+}
+
+// ══════════════════════════════════════════════════════════
+// Page 1 — 每月總覽
+// ══════════════════════════════════════════════════════════
+function getP1Params() {
+  return {
+    prevS: document.getElementById('prev-s')?.value,
+    prevE: document.getElementById('prev-e')?.value,
+    currS: document.getElementById('curr-s')?.value,
+    currE: document.getElementById('curr-e')?.value,
+    accS:  document.getElementById('acc-s')?.value,
+    accE:  document.getElementById('acc-e')?.value,
+  };
+}
+
+function renderP1() {
+  if (!S.rows.length) return;
+  const p = getP1Params();
+  if (!p.currS) return;
+
+  const prevRows  = filterMM(p.prevS, p.prevE);
+  const currRows  = filterMM(p.currS, p.currE);
+  const accRows   = filterMM(p.accS,  p.accE);
+  const lyCurrRows= currRows.map(r=>({...r,yyyymm:prevYearMM(r.yyyymm)}));
+
+  // 找去年同期/累計資料
+  const lyCurrMMs = monthsBetween(p.currS,p.currE).map(prevYearMM);
+  const lyAccMMs  = monthsBetween(p.accS, p.accE).map(prevYearMM);
+  const lyCurr    = S.rows.filter(r => lyCurrMMs.includes(r.yyyymm));
+  const lyAcc     = S.rows.filter(r => lyAccMMs.includes(r.yyyymm));
+
+  const forSvc = (rows, svc) => svc === 'all'
+    ? rows.filter(r => r.serviceType !== '代駕服務')
+    : rows.filter(r => r.serviceType === svc);
+
+  // 指標卡片
+  const aS = S.svc === 'all' ? '機場接送' : S.svc === 'airport' ? '機場接送' : '一般接送';
+  const svcRows = forSvc(currRows, S.svc);
+  const prevSvcRows = forSvc(prevRows, S.svc);
+  const aggCurr = aggregate(svcRows, []);
+  const aggPrev = aggregate(prevSvcRows, []);
+  const cv = aggCurr['']||{};
+  const pv = aggPrev['']||{};
+
+  // 目標
+  const currMonth = parseInt(p.currE?.substring(4,6)||0);
+  const goalTrips = S.svc === 'general'
+    ? (S.goals[S.goalVer].general_trips[currMonth-1]||0)
+    : (S.goals[S.goalVer].airport_trips[currMonth-1]||0);
+
+  const mGrid = document.getElementById('p1-metrics');
+  const svcLabel = S.svc === 'general' ? '一般接送' : S.svc === 'airport' ? '機場接送' : '全部服務';
+  mGrid.innerHTML = [
+    { l:`${svcLabel} 趟次（當期）`, v: fmt(cv.trips), sub: fmtChg(cv.trips, pv.trips) },
+    { l:'達成率', v:'', badge: badge(cv.trips, goalTrips) },
+    { l:'平均營收', v: fmt(cv.avgRevenue,'money'), sub: fmtChg(cv.avgRevenue, pv.avgRevenue) },
+    { l:'毛利率', v: fmt(cv.marginRate,'pct'), sub: fmtChg(cv.marginRate, pv.marginRate) },
+  ].map(c => `<div class="metric-card">
+    <div class="metric-label">${c.l}</div>
+    <div class="metric-val">${c.v}</div>
+    <div class="metric-sub">${c.badge||c.sub||''}</div>
+  </div>`).join('');
+
+  // 主表格
+  const buildSvcBlock = (svcName, label) => {
+    const pd = aggregate(forSvc(prevRows, svcName), ['clientHigh']);
+    const cd = aggregate(forSvc(currRows, svcName), ['clientHigh']);
+    const ad = aggregate(forSvc(accRows,  svcName), ['clientHigh']);
+    const ld = aggregate(forSvc(lyCurr,  svcName), ['clientHigh']);
+    const la = aggregate(forSvc(lyAcc,   svcName), ['clientHigh']);
+    const pA = aggregate(forSvc(prevRows, svcName), []);
+    const cA = aggregate(forSvc(currRows, svcName), []);
+    const aA = aggregate(forSvc(accRows,  svcName), []);
+    const lA = aggregate(forSvc(lyCurr,  svcName), []);
+    const laA= aggregate(forSvc(lyAcc,   svcName), []);
+    const pD = aggregate(forSvc(prevRows, svcName), ['driverType']);
+    const cD = aggregate(forSvc(currRows, svcName), ['driverType']);
+    const svcKey = svcName === '機場接送' ? 'airport' : 'general';
+    const mIdx = parseInt(p.currE?.substring(4,6)||1)-1;
+    const aIdx = parseInt(p.accE?.substring(4,6)||1)-1;
+    const tGoal = S.goals[S.goalVer][svcKey+'_trips'][mIdx]||0;
+    const aGoal = monthsBetween(p.accS,p.accE).reduce((s,mm)=>{
+      const mi = parseInt(mm.substring(4,6))-1;
+      return s + (S.goals[S.goalVer][svcKey+'_trips'][mi]||0);
+    }, 0);
+    const annGoal = S.goals[S.goalVer][svcKey+'_trips'].reduce((a,b)=>a+b,0);
+    const cv = cA['']||{}, pv = pA['']||{}, av = aA['']||{}, lv = lA['']||{}, lav = laA['']||{};
+
+    let rows = `<tr><td class="tl sec" colspan="15">${label}</td></tr>`;
+    ['信用卡','企業客戶','一般散客'].forEach(c => {
+      const cv2=cd[c]||{},pv2=pd[c]||{},av2=ad[c]||{},lv2=ld[c]||{},lav2=la[c]||{};
+      rows += `<tr>
+        <td class="tl" style="padding-left:14px">${c}</td><td>趟</td><td>—</td>
+        <td>${fmt(pv2.trips)}</td>
+        <td class="c1">—</td><td class="c1">${fmt(cv2.trips)}</td><td class="c1">—</td><td class="c1">${fmtChg(cv2.trips,pv2.trips)}</td>
+        <td class="c2">—</td><td class="c2">${fmt(av2.trips)}</td><td class="c2">—</td>
+        <td class="c3">${fmt(lv2.trips)}</td><td class="c3">${fmtChg(cv2.trips,lv2.trips)}</td>
+        <td class="c4">${fmt(lav2.trips)}</td><td class="c4">${fmtChg(av2.trips,lav2.trips)}</td>
+      </tr>`;
+    });
+    rows += `<tr>
+      <td class="tl sub" style="padding-left:8px">合計</td><td class="sub">趟</td><td class="sub">${fmt(annGoal)}</td>
+      <td class="sub">${fmt(pv.trips)}</td>
+      <td class="c1 sub">${fmt(tGoal)}</td><td class="c1 sub">${fmt(cv.trips)}</td><td class="c1 sub">${badge(cv.trips,tGoal)}</td><td class="c1 sub">${fmtChg(cv.trips,pv.trips)}</td>
+      <td class="c2 sub">${fmt(aGoal)}</td><td class="c2 sub">${fmt(av.trips)}</td><td class="c2 sub">${badge(av.trips,aGoal)}</td>
+      <td class="c3 sub">${fmt(lv.trips)}</td><td class="c3 sub">${fmtChg(cv.trips,lv.trips)}</td>
+      <td class="c4 sub">${fmt(lav.trips)}</td><td class="c4 sub">${fmtChg(av.trips,lav.trips)}</td>
+    </tr>`;
+    ['自聘司機','承攬司機','委外司機'].forEach(d => {
+      const cv2=cD[d]||{}, pv2=pD[d]||{};
+      rows += `<tr>
+        <td class="tl" style="padding-left:14px">${d}</td><td>趟</td><td>—</td>
+        <td>${fmt(pv2.trips)}</td>
+        <td class="c1">—</td><td class="c1">${fmt(cv2.trips)}</td><td class="c1">—</td><td class="c1">${fmtChg(cv2.trips,pv2.trips)}</td>
+        <td class="c2" colspan="7">—</td>
+      </tr>`;
+    });
+    rows += `<tr>
+      <td class="tl" style="padding-left:14px">平均營收</td><td>元</td><td>—</td>
+      <td>${fmt(pv.avgRevenue,'money')}</td>
+      <td class="c1">—</td><td class="c1">${fmt(cv.avgRevenue,'money')}</td><td class="c1">—</td><td class="c1">${fmtChg(cv.avgRevenue,pv.avgRevenue)}</td>
+      <td class="c2">—</td><td class="c2">${fmt(av.avgRevenue,'money')}</td><td class="c2">—</td>
+      <td class="c3">${fmt(lv.avgRevenue,'money')}</td><td class="c3">${fmtChg(cv.avgRevenue,lv.avgRevenue)}</td>
+      <td class="c4">${fmt(lav.avgRevenue,'money')}</td><td class="c4">${fmtChg(av.avgRevenue,lav.avgRevenue)}</td>
+    </tr>`;
+    return rows;
+  };
+
+  const prevLabel = p.prevS===p.prevE ? mmLabel(p.prevS) : mmLabel(p.prevS)+'～'+mmLabel(p.prevE);
+  const currLabel = p.currS===p.currE ? mmLabel(p.currS) : mmLabel(p.currS)+'～'+mmLabel(p.currE);
+  const accLabel  = mmLabel(p.accS)+'～'+mmLabel(p.accE);
+
+  const html = `<table id="p1-tbl">
+    <thead>
+      <tr>
+        <th class="thl g0" rowspan="2" style="min-width:100px">指標項目</th>
+        <th class="g0" rowspan="2">單位</th><th class="g0" rowspan="2">年度目標</th>
+        <th class="g0" rowspan="2">上期<br><small>${prevLabel}</small></th>
+        <th colspan="4" class="g1">當期 ${currLabel}</th>
+        <th colspan="3" class="g2">累計 ${accLabel}</th>
+        <th colspan="2" class="g3">去年同期</th>
+        <th colspan="2" class="g4">去年累計</th>
+      </tr>
+      <tr>
+        <th class="g1">目標</th><th class="g1">實績</th><th class="g1">達成率</th><th class="g1">環比</th>
+        <th class="g2">目標</th><th class="g2">實績</th><th class="g2">達成率</th>
+        <th class="g3">實績</th><th class="g3">同比</th>
+        <th class="g4">實績</th><th class="g4">同比</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${buildSvcBlock('機場接送','① 機場接送')}
+      ${buildSvcBlock('一般接送','② 一般接送')}
+    </tbody>
+  </table>`;
+  document.getElementById('p1-wrap').innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════
+// Page 2 — 目標設定
+// ══════════════════════════════════════════════════════════
+const GOAL_ITEMS = [
+  { key:'airport_trips', label:'機場接送 趟次', unit:'趟' },
+  { key:'general_trips', label:'一般接送 趟次', unit:'趟' },
+  { key:'airport_revenue', label:'機場接送 營收', unit:'元' },
+  { key:'general_revenue', label:'一般接送 營收', unit:'元' },
+  { key:'driver_count', label:'自有司機 人數', unit:'人' },
+];
+const MN = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function renderP2() {
+  const g = S.goals[S.goalVer];
+  let html = `<table><thead><tr>
+    <th class="thl" style="min-width:120px">項目</th><th>單位</th>
+    ${MN.map(m=>`<th>${m}</th>`).join('')}
+    <th style="background:rgba(29,158,117,.08);color:#0F6E56">年度目標</th>
+  </tr></thead><tbody>`;
+  GOAL_ITEMS.forEach((item,ri) => {
+    const vals = g[item.key]||Array(12).fill(0);
+    const total = vals.reduce((a,b)=>a+b,0);
+    const cells = vals.map((v,mi)=>`<td><input class="gi" data-ri="${ri}" data-mi="${mi}" value="${Number(v).toLocaleString()}" oninput="recalcGoal(${ri})"></td>`).join('');
+    html += `<tr><td class="tl">${item.label}</td><td class="tl">${item.unit}</td>${cells}<td id="ga-${ri}" style="background:rgba(29,158,117,.08);color:#0F6E56;font-weight:600;text-align:right">${total.toLocaleString()}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('p2-wrap').innerHTML = html;
+}
+
+function recalcGoal(ri) {
+  const inputs = document.querySelectorAll(`input[data-ri="${ri}"]`);
+  let t = 0;
+  inputs.forEach(inp => { t += parseInt(inp.value.replace(/[,，]/g,''))||0; });
+  const el = document.getElementById('ga-'+ri);
+  if (el) el.textContent = t.toLocaleString();
+  // 同步到狀態
+  const item = GOAL_ITEMS[ri];
+  if (!item) return;
+  S.goals[S.goalVer][item.key] = [...inputs].map(i=>parseInt(i.value.replace(/[,，]/g,''))||0);
+}
+
+function saveGoals() {
+  try {
+    localStorage.setItem('dashboard_goals', JSON.stringify(S.goals));
+    document.getElementById('p2-hint').textContent = '已儲存 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+    toast('✅ 目標已儲存');
+  } catch(e) { toast('儲存失敗：'+e.message); }
+}
+
+function resetGoals() {
+  S.goals[S.goalVer] = getDefaultGoals()[S.goalVer] || getDefaultGoals();
+  renderP2();
+  toast('已重設為預設值');
+}
+
+// ══════════════════════════════════════════════════════════
+// Page 3 — 交叉分析
+// ══════════════════════════════════════════════════════════
+function renderP3() {
+  if (!S.rows.length) return;
+  const s = document.getElementById('p3-s')?.value;
+  const e = document.getElementById('p3-e')?.value;
+  if (!s||!e) return;
+
+  const rowF  = document.getElementById('p3-row')?.value || 'serviceType';
+  const colF  = document.getElementById('p3-col')?.value || 'clientHigh';
+  const thirdF= document.getElementById('p3-third')?.value || '';
+  const metric= document.querySelector('.tgb.active[data-metric]')?.dataset.metric || 'trips';
+
+  const rows = filterMM(s, e).filter(r => r.serviceType !== '代駕服務' || rowF === 'serviceType');
+  const rowVals = [...new Set(rows.map(r=>r[rowF]||''))].filter(Boolean).sort();
+  const colVals = [...new Set(rows.map(r=>r[colF]||''))].filter(Boolean).sort();
+  const thirdVals = thirdF ? [...new Set(rows.map(r=>r[thirdF]||''))].filter(Boolean).sort() : [];
+
+  const getM = (agg,key) => {
+    const v = agg[key]||{};
+    if (metric==='trips') return v.trips||0;
+    if (metric==='revenue') return v.revenue||0;
+    if (metric==='cost') return v.cost||0;
+    if (metric==='profit') return v.profit||0;
+    if (metric==='marginRate') return v.marginRate||0;
+    return 0;
+  };
+  const fmtM = v => metric==='marginRate' ? fmt(v,'pct') : (metric==='revenue'||metric==='cost'||metric==='profit') ? fmt(v,'money') : fmt(v);
+
+  const rowLabel = document.getElementById('p3-row')?.options[document.getElementById('p3-row')?.selectedIndex]?.text || '';
+  const colLabel = document.getElementById('p3-col')?.options[document.getElementById('p3-col')?.selectedIndex]?.text || '';
+  document.getElementById('p3-title').textContent = `交叉分析 — ${rowLabel} × ${colLabel}（${metric==='trips'?'趟次':metric}）`;
+
+  let html = `<table id="p3-tbl"><thead><tr>
+    <th class="thl">${rowLabel}</th>
+    ${colVals.map(c=>`<th>${c}</th>`).join('')}<th>合計</th>
+  </tr></thead><tbody>`;
+
+  rowVals.forEach(rv => {
+    const rvRows = rows.filter(r=>r[rowF]===rv);
+    const agg = aggregate(rvRows, [colF]);
+    const cells = colVals.map(cv=>fmtM(getM(agg,cv)));
+    const total = colVals.reduce((s,cv)=>s+(metric==='marginRate'?0:getM(agg,cv)),0);
+    const hasThird = thirdF && thirdVals.length;
+    const tri = hasThird ? '▶ ' : '';
+    html += `<tr ${hasThird?`style="cursor:pointer" onclick="toggleGroup('${rv.replace(/'/g,'')}')`:''}">
+      <td class="tl">${tri}${rv}</td>
+      ${cells.map(c=>`<td>${c}</td>`).join('')}
+      <td style="font-weight:600">${metric==='marginRate'?fmt(getM(aggregate(rvRows,[]),'')||0,'pct'):fmtM(total)}</td>
+    </tr>`;
+    if (hasThird) {
+      thirdVals.forEach(tv => {
+        const tvRows = rvRows.filter(r=>r[thirdF]===tv);
+        const tagg = aggregate(tvRows,[colF]);
+        const tcells = colVals.map(cv=>fmtM(getM(tagg,cv)));
+        const ttotal = colVals.reduce((s,cv)=>s+(metric==='marginRate'?0:getM(tagg,cv)),0);
+        html += `<tr data-group="${rv.replace(/'/g,'')}" style="display:none">
+          <td class="tl" style="padding-left:22px;color:var(--muted)">${tv}</td>
+          ${tcells.map(c=>`<td>${c}</td>`).join('')}
+          <td>${metric==='marginRate'?'—':fmtM(ttotal)}</td>
+        </tr>`;
+      });
+      // 小計
+      const sagg = aggregate(rvRows,[colF]);
+      const scells = colVals.map(cv=>fmtM(getM(sagg,cv)));
+      const stotal = colVals.reduce((s,cv)=>s+(metric==='marginRate'?0:getM(sagg,cv)),0);
+      html += `<tr data-group="${rv.replace(/'/g,'')}" class="sub" style="display:none">
+        <td class="tl sub" style="padding-left:14px">小計</td>
+        ${scells.map(c=>`<td class="sub">${c}</td>`).join('')}
+        <td class="sub" style="font-weight:600">${metric==='marginRate'?'—':fmtM(stotal)}</td>
+      </tr>`;
+    }
+  });
+
+  // 合計列
+  const totalAgg = aggregate(rows,[colF]);
+  const tcells = colVals.map(cv=>fmtM(getM(totalAgg,cv)));
+  const grand = colVals.reduce((s,cv)=>s+(metric==='marginRate'?0:getM(totalAgg,cv)),0);
+  html += `<tr style="background:rgba(29,158,117,.06)">
+    <td class="tl" style="font-weight:700">合計</td>
+    ${tcells.map(c=>`<td style="font-weight:600">${c}</td>`).join('')}
+    <td style="font-weight:700">${metric==='marginRate'?'—':fmtM(grand)}</td>
+  </tr></tbody></table>`;
+  document.getElementById('p3-wrap').innerHTML = html;
+}
+
+function toggleGroup(rv) {
+  document.querySelectorAll(`[data-group="${rv}"]`).forEach(r=>{
+    r.style.display = r.style.display==='none'?'':'none';
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// Page 4 — 趨勢圖
+// ══════════════════════════════════════════════════════════
+const COLORS = ['#1D9E75','#185FA5','#BA7517','#A32D2D','#534AB7','#088484'];
+
+function renderP4() {
+  if (!S.rows.length) return;
+  const s    = document.getElementById('p4-s')?.value;
+  const e    = document.getElementById('p4-e')?.value;
+  const svc  = document.getElementById('p4-svc')?.value || 'all';
+  const dim  = document.getElementById('p4-dim')?.value || 'none';
+  const met  = document.querySelector('.tgb.active[data-trend]')?.dataset.trend || 'trips';
+  if (!s||!e) return;
+
+  const months = monthsBetween(s, e);
+  const lyMonths = months.map(prevYearMM);
+  const labels = months.map(mmLabel);
+  const isRate = met === 'marginRate';
+  const getV = (agg,key) => {
+    const v=agg[key]||{};
+    if(met==='trips') return v.trips||0;
+    if(met==='revenue') return v.revenue||0;
+    if(met==='cost') return v.cost||0;
+    if(met==='profit') return v.profit||0;
+    if(met==='marginRate') return v.marginRate||0;
+    return 0;
+  };
+
+  const filterSvc = rows => svc==='all'?rows.filter(r=>r.serviceType!=='代駕服務'):rows.filter(r=>r.serviceType===svc);
+  const dimField = dim!=='none' ? dim : null;
+  const dimVals = dimField ? [...new Set(S.rows.map(r=>r[dimField]||''))].filter(Boolean).sort() : ['合計'];
+
+  const datasets = dimVals.map((dv,i) => ({
+    label: dv,
+    data: months.map(mm => {
+      const rows = filterSvc(S.rows.filter(r=>r.yyyymm===mm));
+      const agg = aggregate(rows, dimField?[dimField]:[]);
+      return getV(agg, dimField?dv:'');
+    }),
+    borderColor: COLORS[i%COLORS.length],
+    backgroundColor: i===0?`${COLORS[0]}15`:'transparent',
+    tension: 0.3, pointRadius: 4, fill: i===0,
+  }));
+
+  const lyData = lyMonths.map(mm => {
+    const rows = filterSvc(S.rows.filter(r=>r.yyyymm===mm));
+    const agg = aggregate(rows,[]);
+    return getV(agg,'');
+  });
+
+  // 更新圖例
+  const leg = document.getElementById('p4-legend');
+  leg.innerHTML = datasets.map((d,i)=>`<span style="display:flex;align-items:center;gap:3px"><span style="width:12px;height:3px;background:${COLORS[i%COLORS.length]};display:inline-block;border-radius:2px"></span>${d.label}</span>`).join('')
+    + `<span style="display:flex;align-items:center;gap:3px"><span style="width:12px;height:0;display:inline-block;border-top:2px dashed #aaa"></span>去年</span>`;
+
+  const tCfg = {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{y:{ticks:{callback:v=>isRate?(v*100).toFixed(1)+'%':v.toLocaleString()}}}
+  };
+
+  if (S.charts.trend) S.charts.trend.destroy();
+  S.charts.trend = new Chart(document.getElementById('trend-chart'), {
+    type:'line', data:{ labels, datasets:[...datasets,{
+      label:'去年',data:lyData,borderColor:'#bbb',borderDash:[4,4],tension:0.3,pointRadius:3,fill:false
+    }]}, options:tCfg
+  });
+
+  if (S.charts.yoy) S.charts.yoy.destroy();
+  S.charts.yoy = new Chart(document.getElementById('yoy-chart'), {
+    type:'bar', data:{ labels, datasets:[
+      {label:'今年',data:datasets[0]?.data||[],backgroundColor:'#1D9E75'},
+      {label:'去年',data:lyData,backgroundColor:'#9FE1CB'},
+    ]}, options:{...tCfg}
+  });
+
+  // 進度條
+  const prog = document.getElementById('p4-progress');
+  const mainData = datasets[0]?.data||[];
+  const goalData = months.map(mm=>{
+    const mi=parseInt(mm.substring(4,6))-1;
+    return svc==='general' ? (S.goals[S.goalVer].general_trips[mi]||0) : (S.goals[S.goalVer].airport_trips[mi]||0);
+  });
+  const actual=mainData.reduce((a,b)=>a+(b||0),0);
+  const goal=goalData.reduce((a,b)=>a+(b||0),0);
+  if (goal) {
+    const rate=actual/goal;
+    const pct=(rate*100).toFixed(1)+'%';
+    const col=rate>=1?'#1D9E75':rate>=0.8?'#EF9F27':'#E24B4A';
+    prog.innerHTML=`<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+      <span style="color:var(--muted)">${svc==='general'?'一般接送':'機場接送'} 趟次</span>
+      <span style="font-weight:600;color:${col}">${pct} <span style="color:#aaa;font-weight:400">${actual.toLocaleString()} / ${goal.toLocaleString()}</span></span>
+    </div>
+    <div class="pb"><div class="pf" style="width:${Math.min(rate*100,100)}%;background:${col}"></div></div>`;
+  } else {
+    prog.innerHTML='<div class="empty">請先設定目標值</div>';
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// Page 5 — AI 分析摘要產生
+// ══════════════════════════════════════════════════════════
+function genSummary(type) {
+  if (!S.rows.length) { toast('請先上傳資料！'); return; }
+  const p = getP1Params();
+  const currRows = filterMM(p.currS, p.currE);
+  const prevRows = filterMM(p.prevS, p.prevE);
+  const lyCurrMMs = monthsBetween(p.currS,p.currE).map(prevYearMM);
+  const lyCurr = S.rows.filter(r=>lyCurrMMs.includes(r.yyyymm));
+
+  const airport = currRows.filter(r=>r.serviceType==='機場接送');
+  const general = currRows.filter(r=>r.serviceType==='一般接送');
+  const pAirport = prevRows.filter(r=>r.serviceType==='機場接送');
+  const pGeneral = prevRows.filter(r=>r.serviceType==='一般接送');
+  const lyAirport = lyCurr.filter(r=>r.serviceType==='機場接送');
+  const lyGeneral = lyCurr.filter(r=>r.serviceType==='一般接送');
+
+  const aA = aggregate(airport,[])[''||'']||{};
+  const aG = aggregate(general,[])[''||'']||{};
+  const pA = aggregate(pAirport,[])[''||'']||{};
+  const pG = aggregate(pGeneral,[])[''||'']||{};
+  const lyA= aggregate(lyAirport,[])[''||'']||{};
+  const lyG= aggregate(lyGeneral,[])[''||'']||{};
+
+  const currMM = p.currS===p.currE?mmLabel(p.currS):mmLabel(p.currS)+'～'+mmLabel(p.currE);
+  const prevMM = p.prevS===p.prevE?mmLabel(p.prevS):mmLabel(p.prevS)+'～'+mmLabel(p.prevE);
+
+  let text = '';
+  if (type==='overview') {
+    text = `【接送服務月報分析請求】
+分析期間：${currMM}
+對比期間：${prevMM}（上期）
+
+■ 機場接送
+・趟次：${(aA.trips||0).toLocaleString()} 趟（上期：${(pA.trips||0).toLocaleString()}，去年同期：${(lyA.trips||0).toLocaleString()}）
+・營收：$${Math.round(aA.revenue||0).toLocaleString()}（上期：$${Math.round(pA.revenue||0).toLocaleString()}）
+・成本：$${Math.round(aA.cost||0).toLocaleString()}
+・毛利：$${Math.round(aA.profit||0).toLocaleString()}
+・毛利率：${((aA.marginRate||0)*100).toFixed(1)}%（上期：${((pA.marginRate||0)*100).toFixed(1)}%）
+・平均營收：$${Math.round(aA.avgRevenue||0).toLocaleString()}
+
+■ 一般接送
+・趟次：${(aG.trips||0).toLocaleString()} 趟（上期：${(pG.trips||0).toLocaleString()}，去年同期：${(lyG.trips||0).toLocaleString()}）
+・營收：$${Math.round(aG.revenue||0).toLocaleString()}（上期：$${Math.round(pG.revenue||0).toLocaleString()}）
+・成本：$${Math.round(aG.cost||0).toLocaleString()}
+・毛利：$${Math.round(aG.profit||0).toLocaleString()}
+・毛利率：${((aG.marginRate||0)*100).toFixed(1)}%（上期：${((pG.marginRate||0)*100).toFixed(1)}%）
+・平均營收：$${Math.round(aG.avgRevenue||0).toLocaleString()}
+
+請幫我分析以上數據，指出亮點、異常、與值得關注的趨勢，並給出建議。`;
+  } else if (type==='client') {
+    const byClientA = aggregate(airport,['clientHigh']);
+    const byClientG = aggregate(general,['clientHigh']);
+    text = `【客戶類型分析請求】期間：${currMM}\n\n■ 機場接送 客戶類型分布\n`;
+    Object.entries(byClientA).forEach(([k,v])=>{
+      text += `・${k}：${(v.trips||0).toLocaleString()}趟，毛利率${((v.marginRate||0)*100).toFixed(1)}%，平均營收$${Math.round(v.avgRevenue||0).toLocaleString()}\n`;
+    });
+    text += `\n■ 一般接送 客戶類型分布\n`;
+    Object.entries(byClientG).forEach(([k,v])=>{
+      text += `・${k}：${(v.trips||0).toLocaleString()}趟，毛利率${((v.marginRate||0)*100).toFixed(1)}%，平均營收$${Math.round(v.avgRevenue||0).toLocaleString()}\n`;
+    });
+    text += `\n請分析哪個客戶類型貢獻最高、哪個毛利率偏低，以及改善建議。`;
+  } else if (type==='cost') {
+    const byVendor = aggregate(currRows,['vendor']);
+    text = `【成本異常分析請求】期間：${currMM}\n\n■ 各車商成本分布（趟次前10）\n`;
+    Object.entries(byVendor).sort((a,b)=>(b[1].trips||0)-(a[1].trips||0)).slice(0,10).forEach(([k,v])=>{
+      text += `・${k}：${(v.trips||0).toLocaleString()}趟，成本$${Math.round(v.cost||0).toLocaleString()}，毛利率${((v.marginRate||0)*100).toFixed(1)}%\n`;
+    });
+    const negProfit = currRows.filter(r=>r.profit<0);
+    text += `\n負毛利案件數：${negProfit.length} 件\n`;
+    text += `\n請分析成本結構，指出異常車商或合約，並給出改善建議。`;
+  } else if (type==='trend') {
+    const months = S.months.slice(-6);
+    text = `【月趨勢分析請求】最近6個月數據\n\n`;
+    months.forEach(mm=>{
+      const mRows = S.rows.filter(r=>r.yyyymm===mm&&r.serviceType!=='代駕服務');
+      const agg = aggregate(mRows,[])[''||'']||{};
+      text += `${mmLabel(mm)}：${(agg.trips||0).toLocaleString()}趟，毛利率${((agg.marginRate||0)*100).toFixed(1)}%，平均營收$${Math.round(agg.avgRevenue||0).toLocaleString()}\n`;
+    });
+    text += `\n請分析趨勢走向，說明是否有季節性、成長或衰退的跡象，並預測下個月可能的表現。`;
+  } else if (type==='goal') {
+    const mIdx = parseInt(p.currE?.substring(4,6)||1)-1;
+    const aGoal = S.goals[S.goalVer].airport_trips[mIdx]||0;
+    const gGoal = S.goals[S.goalVer].general_trips[mIdx]||0;
+    text = `【目標達成分析請求】期間：${currMM}\n\n■ 機場接送\n・目標：${aGoal.toLocaleString()} 趟\n・實績：${(aA.trips||0).toLocaleString()} 趟\n・達成率：${aGoal?(((aA.trips||0)/aGoal)*100).toFixed(1)+'%':'無目標'}\n\n■ 一般接送\n・目標：${gGoal.toLocaleString()} 趟\n・實績：${(aG.trips||0).toLocaleString()} 趟\n・達成率：${gGoal?(((aG.trips||0)/gGoal)*100).toFixed(1)+'%':'無目標'}\n\n請評估目標達成情況，預測年度是否能達標，並給出建議策略。`;
+  }
+
+  const out = document.getElementById('ai-output');
+  const acts = document.getElementById('ai-actions');
+  out.textContent = text;
+  out.style.display = 'block';
+  acts.style.display = 'flex';
+  toast('✅ 摘要已產生，請複製後貼到 Claude.ai');
+}
+
+function genCustom() {
+  const q = document.getElementById('custom-q').value.trim();
+  if (!q) { toast('請輸入問題'); return; }
+  if (!S.rows.length) { toast('請先上傳資料！'); return; }
+
+  const p = getP1Params();
+  const currRows = filterMM(p.currS, p.currE);
+  const agg = aggregate(currRows.filter(r=>r.serviceType!=='代駕服務'),[]);
+  const v = agg['']||{};
+  const text = `【自訂分析請求】\n問題：${q}\n\n當前數據摘要（${mmLabel(p.currS)}～${mmLabel(p.currE)}）：\n・總趟次：${(v.trips||0).toLocaleString()}\n・總營收：$${Math.round(v.revenue||0).toLocaleString()}\n・總成本：$${Math.round(v.cost||0).toLocaleString()}\n・毛利率：${((v.marginRate||0)*100).toFixed(1)}%\n・總資料筆數：${S.rows.length.toLocaleString()} 筆\n\n請根據以上數據回答問題。`;
+
+  const out = document.getElementById('ai-output');
+  const acts = document.getElementById('ai-actions');
+  out.textContent = text;
+  out.style.display = 'block';
+  acts.style.display = 'flex';
+  toast('✅ 摘要已產生');
+}
+
+function copyAI() {
+  const text = document.getElementById('ai-output').textContent;
+  navigator.clipboard.writeText(text).then(()=>toast('✅ 已複製！請到 Claude.ai 貼上')).catch(()=>toast('請手動選取文字複製'));
+}
+
+// ══════════════════════════════════════════════════════════
+// 匯出 Excel
+// ══════════════════════════════════════════════════════════
+function exportP1() {
+  const tbl = document.getElementById('p1-tbl');
+  if (!tbl) { toast('請先載入資料'); return; }
+  const wb = XLSX.utils.table_to_book(tbl, {sheet:'每月總覽'});
+  XLSX.writeFile(wb, '每月總覽.xlsx');
+  toast('✅ 每月總覽.xlsx 已下載');
+}
+
+function exportP3() {
+  const tbl = document.getElementById('p3-tbl');
+  if (!tbl) { toast('請先載入資料'); return; }
+  const wb = XLSX.utils.table_to_book(tbl, {sheet:'交叉分析'});
+  XLSX.writeFile(wb, '交叉分析.xlsx');
+  toast('✅ 交叉分析.xlsx 已下載');
+}
+
+// ══════════════════════════════════════════════════════════
+// 事件綁定
+// ══════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  // Tab 切換
+  document.getElementById('tabs').addEventListener('click', e => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.page)?.classList.add('active');
+  });
+
+  // 服務類型切換
+  document.querySelector('[data-svc]')?.closest('.tg').addEventListener('click', e => {
+    const btn = e.target.closest('.tgb[data-svc]');
+    if (!btn) return;
+    btn.parentNode.querySelectorAll('.tgb').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    S.svc = btn.dataset.svc;
+    renderP1();
+  });
+
+  // 目標版本切換（P1）
+  document.querySelector('[data-ver]')?.closest('.tg').addEventListener('click', e => {
+    const btn = e.target.closest('.tgb[data-ver]');
+    if (!btn) return;
+    btn.parentNode.querySelectorAll('.tgb').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    S.goalVer = btn.dataset.ver;
+    renderP1();
+  });
+
+  // 目標版本切換（P2）
+  document.querySelector('[data-gver]')?.closest('.tg').addEventListener('click', e => {
+    const btn = e.target.closest('.tgb[data-gver]');
+    if (!btn) return;
+    btn.parentNode.querySelectorAll('.tgb').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    S.goalVer = btn.dataset.gver;
+    renderP2();
+  });
+
+  // P1 篩選器
+  ['prev-s','prev-e','curr-s','curr-e','acc-s','acc-e'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', renderP1);
+  });
+
+  // P3 篩選器
+  ['p3-s','p3-e','p3-row','p3-col','p3-third'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', renderP3);
+  });
+  document.querySelectorAll('.tgb[data-metric]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.parentNode.querySelectorAll('.tgb').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderP3();
+    });
+  });
+
+  // P4 篩選器
+  ['p4-s','p4-e','p4-svc','p4-dim'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', renderP4);
+  });
+  document.querySelectorAll('.tgb[data-trend]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.parentNode.querySelectorAll('.tgb').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderP4();
+    });
+  });
+
+  // 載入已儲存目標
+  try {
+    const saved = localStorage.getItem('dashboard_goals');
+    if (saved) S.goals = JSON.parse(saved);
+  } catch(e) {}
+
+  renderP2();
+});
+</script>
+</body>
+</html>
